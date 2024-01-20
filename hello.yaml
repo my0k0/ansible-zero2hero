@@ -1,0 +1,10 @@
+student-node: master-node
+
+
+node01:     # client/remote host
+  user: bob
+  passowrd: caleston123
+
+node02:
+  user: bob
+  passowrd: caleston123
