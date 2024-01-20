@@ -1,0 +1,68 @@
+- name: play frontend - prebuild
+  hosts: app
+  become: yes
+  tags: 
+    - fe-pre-build
+  tasks:
+    - name: nodejs is installed
+      import_role:
+        name: geerlingguy.nodejs
+      vars:
+        nodejs_version: "20.x"
+
+- name: play frontend - build
+  hosts: app
+  become: yes
+  vars:
+    be_build_workspace: /opt/build_dir
+    be_repo_url: https://github.com/kubernetes-tn/go-to-do-app.git
+    be_repo_name: go-to-do-app
+  tags:
+    - fe-build
+  tasks:
+    - name: workspace build exists
+      file:
+        name: '{{ be_build_workspace }}'
+        state: directory
+    - name: git checkout
+      git:
+        repo: '{{ be_repo_url }}'
+        dest: '{{ be_build_workspace }}/{{ be_repo_name }}'
+    - name: npm install node_modules
+      npm: 
+        path: '{{ be_build_workspace }}/{{ be_repo_name }}/client'
+        state: present
+
+- name: play frontend - deploy
+  hosts: app
+  become: yes
+  vars:
+    - fe_deploy_dir: /opt/build_dir/go-to-do-app/client
+  tags:
+    - fe-deploy
+  tasks:
+    - name: NODE | Install pm2
+      npm:
+        name: pm2
+        global: yes
+        production: yes
+        state: present
+    - name: NODE | Stop App
+      shell: pm2 stop todo
+      args: 
+        chdir: '{{ fe_deploy_dir }}'
+      ignore_errors: yes
+    - name: .env file exists
+      file:
+        path: '{{ fe_deploy_dir }}/.env'
+        state: file
+    - name: frontend is configured with api
+      lineinfile:
+        path: '{{ fe_deploy_dir }}/.env'
+        regexp: '^REACT_APP_API_ENDPOINT='
+        line: REACT_APP_API_ENDPOINT=http://{{ ansible_host }}:8080
+    - name: NODE | Start App
+      shell: pm2 start node_modules/react-scripts/scripts/start.js --name todo
+      args:
+        chdir: '{{ fe_deploy_dir }}'
+      ignore_errors: yes

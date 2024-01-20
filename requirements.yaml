@@ -1,0 +1,6 @@
+- name: abdennour.golang
+  src: https://github.com/abdennour/ansible-role-golang
+  version: v1.0.11
+
+- name: geerlingguy.nodejs
+  src: geerlingguy.nodejs

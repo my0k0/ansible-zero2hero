@@ -1,0 +1,114 @@
+- name: play database
+  hosts: test
+  become: yes
+  tags:
+    - db-install
+  tasks:
+    - name: mongodb repo file is copied
+      copy:
+        src: mongodb-org-7.0.repo
+        dest: /etc/yum.repos.d/
+
+    - name:  mongodb package is installed
+      package:
+        name: mongodb-org
+        state: present
+
+    - name: mongodb service is started
+      service:
+        name: mongod 
+        state: started
+        enabled: yes
+
+- name: play database - config admin
+  hosts: test
+  become: yes
+  tags:
+    - db-config-admin
+  tasks:
+    - name: admin user is created
+      command: '{{ item }}'
+      loop:
+        - mongosh --eval 'db.getSiblingDB("admin").dropUser("{{ db_admin_user }}")'
+        - |
+          mongosh --eval 'db.getSiblingDB("admin").createUser({ user: "{{ db_admin_user }}", pwd: "{{ db_admin_pass }}", roles: [{ role: "clusterAdmin", db: "admin" }, { role: "userAdminAnyDatabase", db: "admin" }] })'
+    - name: security is enabled
+      blockinfile:
+        path: /etc/mongod.conf
+        block: |
+          security:
+            authorization: "enabled"
+        state: present
+      notify: mongodb is restarted
+
+  handlers:
+    - name: mongodb is restarted
+      service: 
+        name: mongod
+        state: restarted
+
+- name: play - rest of configuration
+  hosts: test
+  become: yes
+  tags:
+    - db-config
+  tasks:
+    - name: pip3 installed
+      package:
+        name: python3-pip
+        state: latest
+    - name: pip pymongo installed
+      pip:
+        name: pymongo
+        state: latest
+    - name: todo do user exists
+      mongodb_user: 
+        login_user: '{{ db_admin_user }}'
+        login_password: '{{ db_admin_pass }}'
+        database: todo
+        user: '{{ db_todo_user }}'
+        password: '{{ db_todo_pass }}'
+        state: present
+        roles: 
+          - db: '{{ db_todo_name }}'
+            role: readWrite
+    - name: db accepts connection from anywhere
+      lineinfile:
+        path: /etc/mongod.conf
+        line: '   bindIp: 0.0.0.0'
+        regexp: "^(.*)bindIp(.*)$"
+        state: present
+      notify: mongodb is restarted
+  handlers:
+    - name: mongodb is restarted
+      service: 
+        name: mongod
+        state: restarted
+
+- name: copy file
+  hosts: test
+  become: yes
+  tags:
+    - copy-config
+  tasks:
+    - name: copy to test
+      copy:
+        src: /tmp/mongod.conf
+        dest: /etc/mongod.conf
+
+- name: copy to 
+  hosts: localhost
+  become: yes
+  tags: 
+    - replace-config
+  tasks:
+    - name: change port
+      lineinfile:
+        path: /tmp/mongod.conf
+        line: '   port: 27017'
+        regexp: 'port: '
+    - name: change bindIp
+      lineinfile:
+        path: /tmp/mongod.conf
+        line: '   bindIp: 127.0.0.1'
+        regexp: 'bindIp: '
